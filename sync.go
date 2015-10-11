@@ -4,18 +4,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"errors"
-	"log"
 	"bufio"
+	"strings"
 	"time"
 )
 
 type directory struct {
 
 	root string
-	directories []*directory
+	dirs []*directory
 	files []*File
-	file_counter, directory_counter, file_inc, dir_inc int
+	fileCtr, dirCtr, file_inc, dir_inc int
 
 }
 
@@ -28,18 +27,20 @@ type File struct {
 }
 
 const (
-	START int = 500
+	DIR = 10 
+	FILE = 50
+	layout = "Jan 2, 2006 3:04pm"
 )
 
 func main() {
 
 	treeA := directory { file_inc: 1, dir_inc: 1 }
-	treeA.directories = make( []*directory, START )
-	treeA.files = make( []*File, START )
+	treeA.dirs = make( []*directory, DIR )
+	treeA.files = make( []*File, FILE )
 
 	treeB := directory { file_inc: 1, dir_inc: 1 }
-	treeB.directories = make( []*directory, START )
-	treeB.files = make( []*File, START )
+	treeB.dirs = make( []*directory, DIR )
+	treeB.files = make( []*File, FILE )
 
 	if len( os.Args ) == 1 {
 
@@ -52,103 +53,168 @@ func main() {
 		treeB.root = os.Args[2]
 	}
 
-
-	if err := explore_tree( &treeA ); err != nil {
-		fmt.Println(err)
-	}
-	if err := explore_tree( &treeB ); err != nil {
-		fmt.Println(err)
-	}
-
-	// Initiate mappings
-//	print_tree(&treeA)
-//	print_tree(&treeB)
-	if files, dirs := count (&treeA); files > 0 {
-		fmt.Println(treeA.root)
-		fmt.Println("Files: ", files)
-		fmt.Println("Dirs: ", dirs)
-	}
-	if files, dirs := count (&treeB); files > 0 {
-		fmt.Println(treeB.root)
-		fmt.Println("Files: ", files)
-		fmt.Println("Dirs: ", dirs)
-	}
-
-	// Make recommendations
-}
-
-func explore_tree( tree *directory ) error {
-
-	if info, fail := os.Stat( tree.root ); fail == nil {
-
-		if !info.IsDir() {
-
-			err := errors.New("Path is not a directory.")
-			return err
+	if test := CheckDir( treeA.root ); test == true {
+		
+		if err := ExploreTree( &treeA ); err != nil {
+			
+			fmt.Println(err)
 		}
 	} else {
-		return fail
+		os.Exit(1)
 	}
 
-	if file, err := os.Open(tree.root); err == nil {
+	if test := CheckDir( treeB.root ); test == true {
+		
+		if err := ExploreTree( &treeB ); err != nil {
 
-		defer file.Close()
-
-		if out, err := file.Readdirnames(0); err == nil {
-
-			for _, i := range out {
-
-				if fInfo, fail := os.Stat( tree.root + "/" + i ); fail == nil {
-
-					if fInfo.IsDir() {
-
-						tree.directories[ tree.directory_counter ] = newDir( tree.root + "/" + i )
-						tree.directory_counter++
-
-						if err := explore_tree( tree.directories[ tree.directory_counter-1 ] ); err != nil {
-							log.Print(err)
-						}
-						// Correct auto lengthening slices
-						//if tree.directory_counter == len(tree.directories) {
-						//	tree.dir_inc++
-							//b := make([]string, START * tree.dir_inc)
-							//tree.directories = copy(tree.directories, b)
-						//}
-					} else {
-
-						tree.files[ tree.file_counter ], _ = newFile( tree.root + "/" + i )
-						tree.file_counter++
-
-					} // End if IsDir
-				} else {
-					return fail
-				} // End if fInfo
-			} // End for
-		}  // End if Readdirnames
+			fmt.Println(err)
+		}
 	} else {
-		log.Print(err)
-	}  // End if Open
+		os.Exit(1)
+	}
 
-	return nil;
+	filesA, dirsA := Count (&treeA)
+	filesB, dirsB := Count (&treeB)
+
+	fmt.Println(dirsA, dirsB)
+
+	dupesA := NewDir(treeA.root)
+	dupesB := NewDir(treeB.root)
+	var md5A = make(map[string]string, filesA)
+	Md5Map( treeA.root, &treeA, md5A, dupesA )
+
+	var md5B = make(map[string]string, filesB)
+	Md5Map( treeB.root, &treeB, md5B, dupesB )
+
+	fmt.Println("A")
+	for k, v := range md5A {
+		fmt.Println("k:", k, "v:", v)
+	}
+	fmt.Println("B")
+	for k, v := range md5B {
+		fmt.Println("k:", k, "v:", v)
+	}
+
+	fmt.Println("A")
+	for i := 0; i < dupesA.fileCtr; i++ {
+		fmt.Println("Dupes:", dupesA.files[i].Name, dupesA.files[i].Hash)
+	}
+	fmt.Println("B")
+	for i := 0; i < dupesB.fileCtr; i++ {
+		fmt.Println("Dupes:", dupesB.files[i].Name, dupesB.files[i].Hash)
+	}
+
+	// Create maps.
+
+	// Make recommendations
+
+
 }
 
-func print_tree( tree *directory ) {
+func Md5Map ( prefix string, tree *directory, md5 map[string] string, dupes *directory )  {
+
+	pre := strings.TrimPrefix( tree.root, prefix )
+
+	for i := 0; i < tree.dirCtr; i++ {
+		Md5Map ( prefix, tree.dirs[i], md5, dupes )
+	}
+
+	for i := 0; i < tree.fileCtr; i++ {
+
+		temp := tree.files[i].Hash
+
+		if _, test := md5[temp]; test { // Test if duplicate hash exists
+
+			temp := File{Name: prefix + "/" + tree.files[i].Name, Hash: temp}
+			dupes.files[dupes.fileCtr] = &temp
+			dupes.fileCtr++
+
+		} else { // Else insert hash into map
+			md5[ temp ] = pre + "/" + tree.files[i].Name
+		}
+	}
+
+}
+
+func FillDupes ( tree *directory, md5 map[string] string, dupes *directory ) {
+	
+	for i := 0; i < dupes.fileCtr; i++ {
+
+		temp := md5[dupes.files[i].Hash]
+		tempFile := File{Name: tree.root + "/" + temp, Hash: dupes.files[i].Hash}
+		dupes.files[dupes.fileCtr] = &tempFile
+		dupes.fileCtr++
+		fmt.Println(tree.root + "/" + temp)
+	}
+}
+
+func CheckDir ( x string ) bool {
+
+	info, _ := os.Stat( x )
+
+	if info.IsDir() {
+		return true
+	} else {
+		fmt.Println(x, "is not a directory.")
+		return false
+	}
+	return false
+}
+
+func ExploreTree( tree *directory ) error {
+
+	file, err := os.Open(tree.root)
+
+	defer file.Close()
+
+	out, err := file.Readdirnames(0)
+
+	for _, i := range out {
+
+		fInfo, _ := os.Stat( tree.root + "/" + i ) // Get current file info
+
+		if fInfo.IsDir() { // If IsDir create and explore new directory
+
+			tree.dirs[ tree.dirCtr ] = NewDir( tree.root + "/" + i )
+			tree.dirCtr++
+
+			ExploreTree( tree.dirs[ tree.dirCtr-1 ] )
+
+			if tree.dirCtr == len(tree.dirs) { // If directories full resize
+				ResizeDir( tree )
+			}
+		} else {
+
+			tree.files[ tree.fileCtr ], _ = NewFile( tree.root + "/" + i )
+			tree.fileCtr++
+
+			if tree.fileCtr == len(tree.files) { // If Files full resize
+				ResizeFile( tree )
+			}
+		} // End if IsDir
+	} // End for loop
+
+	return err;
+}
+
+func PrintTree( tree *directory ) {
 
 	fmt.Println( tree.root )
 
-	for i := 0; i < tree.file_counter; i++ {
-		fmt.Println( tree.files[i] )
+
+	for i := 0; i < tree.dirCtr; i++ {
+		PrintTree( tree.dirs[i] )
 	}
 
-	for i := 0; i < tree.directory_counter; i++ {
-		print_tree( tree.directories[i] )
+	for i := 0; i < tree.fileCtr; i++ {
+		fmt.Println( tree.files[i] )
 	}
 
 }
 
 func ( file *File ) String() string {
 
-	return fmt.Sprintf("  %s    size: %d    md5:%s", file.Name, file.size, file.Hash )
+	return fmt.Sprintf("  %s\tsize: %d\tmd5:%s\tmod_time: %s", file.Name, file.size, file.Hash, file.modification_time.Format(layout) )
 }
 
 func ( dir *directory ) String() string {
@@ -156,20 +222,22 @@ func ( dir *directory ) String() string {
 	return fmt.Sprint( dir.root )
 }
 
-func count( dir *directory ) ( files int, directories int ) {
+func Count( dir *directory ) ( files int, dirs int ) {
 
-	files, directories = dir.file_counter, dir.directory_counter
+	files, dirs = dir.fileCtr, dir.dirCtr
 
-	for i := 0; i < dir.directory_counter; i++ {
-		
-		files += dir.directories[i].file_counter
-		directories += dir.directories[i].directory_counter
+	for i := 0; i < dir.dirCtr; i++ {
+
+		ftemp, dtemp := Count( dir.dirs[i] )
+
+		files += ftemp
+		dirs += dtemp
 	}
 
-	return files, directories
+	return files, dirs
 }
 
-func newFile( file string ) (*File, error) {
+func NewFile( file string ) ( *File, error ) {
 	
 	temp := File{}
 
@@ -177,6 +245,7 @@ func newFile( file string ) (*File, error) {
 
 		temp.size = fInfo.Size()
 		temp.Name = fInfo.Name()
+		temp.modification_time = fInfo.ModTime()
 
 		cmd := exec.Command("md5sum", file)
 		stdout, fail := cmd.StdoutPipe()
@@ -189,14 +258,38 @@ func newFile( file string ) (*File, error) {
 	return &temp, fail
 }
 
-func newDir( direct string ) ( *directory ) {
+func NewDir( direct string ) ( *directory ) {
 
 	temp := directory{ root: direct, file_inc: 1, dir_inc: 1 }
 
-	temp.directories = make( []*directory, START )
-	temp.files = make( []*File, START )
+	temp.dirs = make( []*directory, DIR )
+	temp.files = make( []*File, FILE )
 
 	return &temp
+}
+
+func ResizeDir( tree *directory ) {
+
+	tree.dir_inc++
+	
+	a := make([]*directory, DIR * tree.dir_inc)
+	for i := range tree.dirs {
+		a[i] = tree.dirs[i]
+	}
+
+	tree.dirs = a
+}
+
+func ResizeFile( tree *directory ) {
+
+	tree.file_inc++
+
+	a := make([]*File, FILE * tree.file_inc)
+	for i := range tree.files {
+		a[i] = tree.files[i]
+	}
+
+	tree.files = a
 }
 
 /*
