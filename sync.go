@@ -10,15 +10,6 @@ import (
 //	"crypto/md5"
 )
 
-type directory_tree struct {
-
-	root string
-	directories []*directory
-	files []*File
-	file_counter, directory_counter, file_inc, dir_inc int
-
-}
-
 type directory struct {
 
 	root string
@@ -37,18 +28,16 @@ type File struct {
 }
 
 const (
-
-	START int = 50
-
+	START int = 500
 )
 
 func main() {
 
-	treeA := directory_tree{file_inc: 1, dir_inc: 1}
+	treeA := directory{file_inc: 1, dir_inc: 1}
 	treeA.directories = make([]*directory, START)
 	treeA.files = make([]*File, START)
 
-	treeB := directory_tree{file_inc: 1, dir_inc: 1}
+	treeB := directory{file_inc: 1, dir_inc: 1}
 	treeB.directories = make([]*directory, START)
 	treeB.files = make([]*File, START)
 
@@ -71,12 +60,12 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Println(treeA.directories, treeA.files)
-	fmt.Println(treeB.directories, treeB.files)
-
+	print_tree(&treeA)
+	fmt.Println("")
+	print_tree(&treeB)
 }
 
-func explore_tree(tree *directory_tree) error {
+func explore_tree(tree *directory) error {
 
 	if info, fail := os.Stat(tree.root); fail == nil {
 
@@ -103,6 +92,9 @@ func explore_tree(tree *directory_tree) error {
 
 						tree.directories[tree.directory_counter] = newDir(tree.root + "/" + i)
 						tree.directory_counter++
+						if err := explore_tree(tree.directories[tree.directory_counter-1]); err != nil {
+							log.Print(err)
+						}
 						// Correct auto lengthening slices
 						//if tree.directory_counter == len(tree.directories) {
 						//	tree.dir_inc++
@@ -123,22 +115,27 @@ func explore_tree(tree *directory_tree) error {
 	} else {
 		log.Print(err)
 	}  // End if Open
-	/*
-	outA, err = fileA.Readdirnames(0)
-	for i := range outA {
-		if aInfo, fail := os.Stat(i); fail == nil {
-
-		}
-		fmt.Println(pathA + "/" + outA[i])
-	}
-*/
 
 	return nil;
 }
 
+func print_tree(tree *directory) {
+
+	fmt.Println(tree.root)
+
+	for i := 0; i < tree.file_counter; i++ {
+		fmt.Println(tree.files[i])
+	}
+
+	for i := 0; i < tree.directory_counter; i++ {
+		print_tree(tree.directories[i])
+	}
+
+}
+
 func (file *File) String() string {
 
-	return fmt.Sprint(file.Name)
+	return fmt.Sprintf("    %s    size: %d", file.Name, file.size)
 }
 
 func (dir *directory) String() string {
@@ -169,12 +166,6 @@ func newDir(x string) ( *directory ) {
 }
 
 /*
-	parent string
-	directories []directory
-	files []*File
-	file_counter, directory_counter, file_inc, dir_inc int
-
-
 		fmt.Println("Name:", aInfo.Name())
 		fmt.Println("Size:", aInfo.Size())
 		fmt.Println("Mode:", aInfo.Mode())
