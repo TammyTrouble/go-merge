@@ -1,13 +1,23 @@
 package main
 
-import (
-	"fmt"
+import (          // You can import many packages at once by enclosing all
+	"fmt"     // packages inside of parenthesis
 	"os"
 	"os/exec"
 	"bufio"
 	"strings"
 	"time"
+	"log"
 )
+
+type root struct {  // There are no classes or inheritance Go
+	            // Structs provide variable aggregation
+	root string
+	dirs, dupes, notin, diff *directory
+	md5 map[string] string
+	numFiles, numDirs int
+		    // Go is a procedural OOP hybrid language but
+}                   // but OOP is done Googly with duck typing.
 
 type directory struct {
 
@@ -32,17 +42,12 @@ const (
 	layout = "Jan 2, 2006 3:04pm"
 )
 
-func main() {
+func main() {  // All functions are preceded by the keyword func and 
+	       // the main function takes no arguments and returns no values
 
-	treeA := directory { file_inc: 1, dir_inc: 1 }
-	treeA.dirs = make( []*directory, DIR )
-	treeA.files = make( []*File, FILE )
+	treeA, treeB := root{}, root{}  // You may initialize two variable using commas
 
-	treeB := directory { file_inc: 1, dir_inc: 1 }
-	treeB.dirs = make( []*directory, DIR )
-	treeB.files = make( []*File, FILE )
-
-	if len( os.Args ) == 1 {
+	if len( os.Args ) == 1 { // The os package allows use of command line arguments
 
 		fmt.Println("Enter path A:")
 		fmt.Scan(&treeA.root)
@@ -53,9 +58,116 @@ func main() {
 		treeB.root = os.Args[2]
 	}
 
-	if test := CheckDir( treeA.root ); test == true {
+	// This if statement runs the BuildTree function and assigns the returned
+	// error to err. The 'if' part comes after the ;
+	if err := BuildTree(&treeA); err != nil {  
+
+		log.Println(err)
+	}
+	if err := BuildTree(&treeB); err != nil { // It is bad form to throw out the errors
+
+		log.Println(err)
+	}
+
+	if err := CrossCheck(&treeA, &treeB); err != nil {
+
+		log.Println(err)
+	}
+}
+//   Name         Input Variables      Return value
+func CrossCheck ( A *root, B *root ) ( err error ) {  // Named returns require parenthesis
+	
+	A.notin = NewDir(B.root)
+	B.notin = NewDir(A.root)
+	A.diff = NewDir(B.root)
+	B.diff = NewDir(A.root)
+
+	// For loops are versatile and can iterate over values and keys in a map
+
+	for k, v := range B.md5 { // Test for files in B that are not in A
 		
-		if err := ExploreTree( &treeA ); err != nil {
+		if _, test := A.md5[k]; !test {
+
+			temp := File{Name: B.root + v, Hash: k}
+			A.notin.files[A.notin.fileCtr] = &temp
+			A.notin.fileCtr++
+
+			if A.notin.fileCtr == len(A.notin.files) { // If Files full resize
+
+				ResizeFile( A.notin )
+			}
+		}
+	}
+
+	fmt.Println("Files not in:", A.root)
+
+	// Or for loops can iterate in a standard looking fashion
+
+	for i := 0; i < A.notin.fileCtr; i++ {
+
+		fmt.Println(A.notin.files[i].Name)
+	}
+
+	for k, v := range A.md5 { // Test for files in A that are not in B
+
+		if _, test := B.md5[k]; !test {
+
+			temp := File{Name: A.root + v, Hash: k}
+			B.notin.files[B.notin.fileCtr] = &temp
+			B.notin.fileCtr++
+
+			if B.notin.fileCtr == len(B.notin.files) { // If Files full resize
+				ResizeFile( B.notin )
+			}
+		}
+	}
+
+	fmt.Println("Files not in:", B.root)
+	for i := 0; i < B.notin.fileCtr; i++ {
+		fmt.Println(B.notin.files[i].Name)
+	}
+
+	var temp []string
+
+	if A.numFiles > B.numFiles {
+
+		temp = make ( []string, A.numFiles )
+	} else {
+		temp = make ( []string, B.numFiles )
+	}
+
+	//in := make ( map[string] string, len(temp) )
+
+
+
+	if len(temp) > 0 {  // This program will not compile without this
+		            // statement because temp will not have been
+	}                   // used.
+
+	return err
+}
+
+// Since this function returns an unnamed boolean it requires no parenthesis
+func SamePath ( fileA *File, rootA string, fileB *File, rootB string ) bool {
+
+	A := strings.TrimPrefix ( fileA.Name, rootA )
+	B := strings.TrimPrefix ( fileB.Name, rootB )
+
+	if A == B {
+		return true
+	} else {
+		return false
+	}
+}
+
+func BuildTree ( Root *root ) ( err error ) {
+
+	Root.dirs = NewDir(Root.root)
+	Root.dupes = NewDir(Root.root)
+	
+	if test := CheckDir( Root.root ); test == true {
+		
+		if err := ExploreTree( Root.dirs ); err != nil {
 			
 			fmt.Println(err)
 		}
@@ -63,59 +175,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	if test := CheckDir( treeB.root ); test == true {
-		
-		if err := ExploreTree( &treeB ); err != nil {
+	Root.numFiles, Root.numDirs = Count ( Root.dirs )
 
-			fmt.Println(err)
-		}
-	} else {
-		os.Exit(1)
+	Root.md5 = make ( map[string]string, Root.numFiles )
+
+	Md5Map( Root.root, Root.dirs, Root.md5, Root.dupes )
+
+	for i := 0; i < Root.dupes.fileCtr; i++ {
+
+		fmt.Println("Dupes:", Root.dupes.files[i].Name, Root.dupes.files[i].Hash)
 	}
 
-	filesA, dirsA := Count (&treeA)
-	filesB, dirsB := Count (&treeB)
-
-	fmt.Println(dirsA, dirsB)
-
-	dupesA := NewDir(treeA.root)
-	dupesB := NewDir(treeB.root)
-	var md5A = make(map[string]string, filesA)
-	Md5Map( treeA.root, &treeA, md5A, dupesA )
-
-	var md5B = make(map[string]string, filesB)
-	Md5Map( treeB.root, &treeB, md5B, dupesB )
-
-	fmt.Println("A")
-	for k, v := range md5A {
-		fmt.Println("k:", k, "v:", v)
-	}
-	fmt.Println("B")
-	for k, v := range md5B {
-		fmt.Println("k:", k, "v:", v)
-	}
-
-	fmt.Println("A")
-	for i := 0; i < dupesA.fileCtr; i++ {
-		fmt.Println("Dupes:", dupesA.files[i].Name, dupesA.files[i].Hash)
-	}
-	fmt.Println("B")
-	for i := 0; i < dupesB.fileCtr; i++ {
-		fmt.Println("Dupes:", dupesB.files[i].Name, dupesB.files[i].Hash)
-	}
-
-	// Create maps.
-
-	// Make recommendations
-
-
+	return err
 }
 
-func Md5Map ( prefix string, tree *directory, md5 map[string] string, dupes *directory )  {
+func Md5Map ( prefix string, tree *directory, md5 map[string] string, dupes *directory ) {
 
 	pre := strings.TrimPrefix( tree.root, prefix )
 
 	for i := 0; i < tree.dirCtr; i++ {
+
 		Md5Map ( prefix, tree.dirs[i], md5, dupes )
 	}
 
@@ -129,22 +208,31 @@ func Md5Map ( prefix string, tree *directory, md5 map[string] string, dupes *dir
 			dupes.files[dupes.fileCtr] = &temp
 			dupes.fileCtr++
 
+			if dupes.fileCtr == len(dupes.files) { // If Files full resize
+
+				ResizeFile( dupes )
+			}
+
 		} else { // Else insert hash into map
 			md5[ temp ] = pre + "/" + tree.files[i].Name
 		}
 	}
 
-}
+	// I think the hanging problem is here
+	// Make dupes 2x bigger than current files
+	counter := dupes.fileCtr
 
-func FillDupes ( tree *directory, md5 map[string] string, dupes *directory ) {
-	
-	for i := 0; i < dupes.fileCtr; i++ {
+	for i := 0; i < counter; i++ { // Get other dupes
 
 		temp := md5[dupes.files[i].Hash]
 		tempFile := File{Name: tree.root + "/" + temp, Hash: dupes.files[i].Hash}
 		dupes.files[dupes.fileCtr] = &tempFile
 		dupes.fileCtr++
-		fmt.Println(tree.root + "/" + temp)
+
+		if dupes.fileCtr == len(dupes.files) { // If Files full resize
+
+			ResizeFile( dupes )
+		}
 	}
 }
 
@@ -161,13 +249,21 @@ func CheckDir ( x string ) bool {
 	return false
 }
 
-func ExploreTree( tree *directory ) error {
+func ExploreTree( tree *directory ) ( err error ) {
 
-	file, err := os.Open(tree.root)
+	file, err := os.Open ( tree.root ) // err shadow variable
+	
+	if err != nil {
+		return err
+	}
 
 	defer file.Close()
 
-	out, err := file.Readdirnames(0)
+	out, err := file.Readdirnames(0) // err shadow variable
+	
+	if err != nil {
+		return err
+	}
 
 	for _, i := range out {
 
@@ -178,9 +274,13 @@ func ExploreTree( tree *directory ) error {
 			tree.dirs[ tree.dirCtr ] = NewDir( tree.root + "/" + i )
 			tree.dirCtr++
 
-			ExploreTree( tree.dirs[ tree.dirCtr-1 ] )
+			if err := ExploreTree( tree.dirs[ tree.dirCtr-1 ] ); err != nil {
+
+				return err
+			}
 
 			if tree.dirCtr == len(tree.dirs) { // If directories full resize
+
 				ResizeDir( tree )
 			}
 		} else {
@@ -189,6 +289,7 @@ func ExploreTree( tree *directory ) error {
 			tree.fileCtr++
 
 			if tree.fileCtr == len(tree.files) { // If Files full resize
+
 				ResizeFile( tree )
 			}
 		} // End if IsDir
@@ -201,20 +302,24 @@ func PrintTree( tree *directory ) {
 
 	fmt.Println( tree.root )
 
-
 	for i := 0; i < tree.dirCtr; i++ {
+
 		PrintTree( tree.dirs[i] )
 	}
 
 	for i := 0; i < tree.fileCtr; i++ {
+
 		fmt.Println( tree.files[i] )
 	}
 
 }
 
+// Duck typing in action.  These two functions fulfill the Stringer interface
+// for both the File and directory structs
+
 func ( file *File ) String() string {
 
-	return fmt.Sprintf("  %s\tsize: %d\tmd5:%s\tmod_time: %s", file.Name, file.size, file.Hash, file.modification_time.Format(layout) )
+	return fmt.Sprintf("  %s\tsize: %d\tmd5:%s\tmod_time: %s", file.Name, file.size, file.modification_time.Format(layout) )
 }
 
 func ( dir *directory ) String() string {
@@ -222,6 +327,7 @@ func ( dir *directory ) String() string {
 	return fmt.Sprint( dir.root )
 }
 
+// Multiple return values require parenthesis around them.
 func Count( dir *directory ) ( files int, dirs int ) {
 
 	files, dirs = dir.fileCtr, dir.dirCtr
@@ -230,7 +336,7 @@ func Count( dir *directory ) ( files int, dirs int ) {
 
 		ftemp, dtemp := Count( dir.dirs[i] )
 
-		files += ftemp
+		files += ftemp  // += does not support multiple assignments
 		dirs += dtemp
 	}
 
@@ -239,13 +345,18 @@ func Count( dir *directory ) ( files int, dirs int ) {
 
 func NewFile( file string ) ( *File, error ) {
 	
-	temp := File{}
+	temp := File {}
 
 	fInfo, fail := os.Stat(file)
 
 		temp.size = fInfo.Size()
 		temp.Name = fInfo.Name()
 		temp.modification_time = fInfo.ModTime()
+
+		// I use os.exec to execute md5sum on every file within the directory
+		// Go does not block and wait for these operations to complete
+		// Once all of the operations have completed the next function
+		// will start.
 
 		cmd := exec.Command("md5sum", file)
 		stdout, fail := cmd.StdoutPipe()
@@ -255,10 +366,12 @@ func NewFile( file string ) ( *File, error ) {
 
 		temp.Hash = line
 
-	return &temp, fail
-}
+	return &temp, fail  // Go's garbage collection is not heavy handed and only
+}                           // deletes junk when they are no longer referenced
+                            // not when they are no longer in scope.
+                            // So go nuts and return pointers to temporary variables
 
-func NewDir( direct string ) ( *directory ) {
+func NewDir( direct string ) *directory {
 
 	temp := directory{ root: direct, file_inc: 1, dir_inc: 1 }
 
@@ -291,14 +404,3 @@ func ResizeFile( tree *directory ) {
 
 	tree.files = a
 }
-
-/*
-type FileInfo interface {
-        Name() string       // base name of the file
-        Size() int64        // length in bytes for regular files; system-dependent for others
-        Mode() FileMode     // file mode bits
-        ModTime() time.Time // modification time
-        IsDir() bool        // abbreviation for Mode().IsDir()
-        Sys() interface{}   // underlying data source (can return nil)
-}
-*/
