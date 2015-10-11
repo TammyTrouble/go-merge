@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"errors"
 	"log"
-//	"io"
+	"bufio"
 	"time"
-//	"crypto/md5"
 )
 
 type directory struct {
@@ -33,15 +33,15 @@ const (
 
 func main() {
 
-	treeA := directory{file_inc: 1, dir_inc: 1}
-	treeA.directories = make([]*directory, START)
-	treeA.files = make([]*File, START)
+	treeA := directory { file_inc: 1, dir_inc: 1 }
+	treeA.directories = make( []*directory, START )
+	treeA.files = make( []*File, START )
 
-	treeB := directory{file_inc: 1, dir_inc: 1}
-	treeB.directories = make([]*directory, START)
-	treeB.files = make([]*File, START)
+	treeB := directory { file_inc: 1, dir_inc: 1 }
+	treeB.directories = make( []*directory, START )
+	treeB.files = make( []*File, START )
 
-	if len(os.Args) == 1 {
+	if len( os.Args ) == 1 {
 
 		fmt.Println("Enter path A:")
 		fmt.Scan(&treeA.root)
@@ -53,21 +53,33 @@ func main() {
 	}
 
 
-	if err := explore_tree(&treeA); err != nil {
+	if err := explore_tree( &treeA ); err != nil {
 		fmt.Println(err)
 	}
-	if err := explore_tree(&treeB); err != nil {
+	if err := explore_tree( &treeB ); err != nil {
 		fmt.Println(err)
 	}
 
-	print_tree(&treeA)
-	fmt.Println("")
-	print_tree(&treeB)
+	// Initiate mappings
+//	print_tree(&treeA)
+//	print_tree(&treeB)
+	if files, dirs := count (&treeA); files > 0 {
+		fmt.Println(treeA.root)
+		fmt.Println("Files: ", files)
+		fmt.Println("Dirs: ", dirs)
+	}
+	if files, dirs := count (&treeB); files > 0 {
+		fmt.Println(treeB.root)
+		fmt.Println("Files: ", files)
+		fmt.Println("Dirs: ", dirs)
+	}
+
+	// Make recommendations
 }
 
-func explore_tree(tree *directory) error {
+func explore_tree( tree *directory ) error {
 
-	if info, fail := os.Stat(tree.root); fail == nil {
+	if info, fail := os.Stat( tree.root ); fail == nil {
 
 		if !info.IsDir() {
 
@@ -86,13 +98,14 @@ func explore_tree(tree *directory) error {
 
 			for _, i := range out {
 
-				if fInfo, fail := os.Stat(tree.root + "/" + i); fail == nil {
+				if fInfo, fail := os.Stat( tree.root + "/" + i ); fail == nil {
 
 					if fInfo.IsDir() {
 
-						tree.directories[tree.directory_counter] = newDir(tree.root + "/" + i)
+						tree.directories[ tree.directory_counter ] = newDir( tree.root + "/" + i )
 						tree.directory_counter++
-						if err := explore_tree(tree.directories[tree.directory_counter-1]); err != nil {
+
+						if err := explore_tree( tree.directories[ tree.directory_counter-1 ] ); err != nil {
 							log.Print(err)
 						}
 						// Correct auto lengthening slices
@@ -103,7 +116,7 @@ func explore_tree(tree *directory) error {
 						//}
 					} else {
 
-						tree.files[tree.file_counter], _ = newFile(tree.root + "/" + i)
+						tree.files[ tree.file_counter ], _ = newFile( tree.root + "/" + i )
 						tree.file_counter++
 
 					} // End if IsDir
@@ -119,45 +132,66 @@ func explore_tree(tree *directory) error {
 	return nil;
 }
 
-func print_tree(tree *directory) {
+func print_tree( tree *directory ) {
 
-	fmt.Println(tree.root)
+	fmt.Println( tree.root )
 
 	for i := 0; i < tree.file_counter; i++ {
-		fmt.Println(tree.files[i])
+		fmt.Println( tree.files[i] )
 	}
 
 	for i := 0; i < tree.directory_counter; i++ {
-		print_tree(tree.directories[i])
+		print_tree( tree.directories[i] )
 	}
 
 }
 
-func (file *File) String() string {
+func ( file *File ) String() string {
 
-	return fmt.Sprintf("    %s    size: %d", file.Name, file.size)
+	return fmt.Sprintf("  %s    size: %d    md5:%s", file.Name, file.size, file.Hash )
 }
 
-func (dir *directory) String() string {
+func ( dir *directory ) String() string {
 
-	return fmt.Sprint(dir.root)
+	return fmt.Sprint( dir.root )
 }
 
-func newFile(x string) (*File, error) {
+func count( dir *directory ) ( files int, directories int ) {
+
+	files, directories = dir.file_counter, dir.directory_counter
+
+	for i := 0; i < dir.directory_counter; i++ {
+		
+		files += dir.directories[i].file_counter
+		directories += dir.directories[i].directory_counter
+	}
+
+	return files, directories
+}
+
+func newFile( file string ) (*File, error) {
 	
 	temp := File{}
 
-	fInfo, fail := os.Stat(x)
+	fInfo, fail := os.Stat(file)
 
 		temp.size = fInfo.Size()
 		temp.Name = fInfo.Name()
 
+		cmd := exec.Command("md5sum", file)
+		stdout, fail := cmd.StdoutPipe()
+		cmd.Start()
+		r := bufio.NewReader(stdout)
+		line, fail := r.ReadString(' ')
+
+		temp.Hash = line
+
 	return &temp, fail
 }
 
-func newDir(x string) ( *directory ) {
+func newDir( direct string ) ( *directory ) {
 
-	temp := directory { root: x, file_inc: 1, dir_inc: 1 }
+	temp := directory{ root: direct, file_inc: 1, dir_inc: 1 }
 
 	temp.directories = make( []*directory, START )
 	temp.files = make( []*File, START )
@@ -166,12 +200,6 @@ func newDir(x string) ( *directory ) {
 }
 
 /*
-		fmt.Println("Name:", aInfo.Name())
-		fmt.Println("Size:", aInfo.Size())
-		fmt.Println("Mode:", aInfo.Mode())
-		fmt.Println(aInfo.Sys())
-
-
 type FileInfo interface {
         Name() string       // base name of the file
         Size() int64        // length in bytes for regular files; system-dependent for others
