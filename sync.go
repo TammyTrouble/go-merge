@@ -74,6 +74,7 @@ func main() {  // All functions are preceded by the keyword func and
 		log.Println(err)
 	}
 }
+
 //   Name         Input Variables      Return value
 func CrossCheck ( A *root, B *root ) ( err error ) {  // Named returns require parenthesis
 	
@@ -127,31 +128,58 @@ func CrossCheck ( A *root, B *root ) ( err error ) {  // Named returns require p
 		fmt.Println(B.notin.files[i].Name)
 	}
 
-	var temp []string
+	var temp [] string
+	var counter int = 0
 
 	if A.numFiles > B.numFiles {
 
-		temp = make ( []string, A.numFiles )
+		temp = make ( [] string, A.numFiles )
 	} else {
-		temp = make ( []string, B.numFiles )
+		temp = make ( [] string, B.numFiles )
 	}
 
-	//in := make ( map[string] string, len(temp) )
+	for k, _ := range A.md5 {
 
+		if _, test := B.md5[k]; test {
 
+			temp[counter] = k
+			counter++
+		}
+	}
 
-	if len(temp) > 0 {  // This program will not compile without this
-		            // statement because temp will not have been
-	}                   // used.
+	counter = 0
+	for _, i := range temp {
+
+		At := A.md5[i]
+		Bt := B.md5[i]
+
+		if ! SamePath(At, A.root, Bt, B.root) {
+
+			ta := File{ Name: A.root + At, Hash: i }
+			tb := File{ Name: B.root + Bt, Hash: i }
+
+			A.diff.files[counter] = &ta
+			B.diff.files[counter] = &tb
+			counter++
+			A.diff.fileCtr++
+			B.diff.fileCtr++
+		}
+	}
+
+	for i := 0; i < A.diff.fileCtr; i++ {
+
+		fmt.Println("Diff:", A.diff.files[i].Name)
+		fmt.Println("Diff:", B.diff.files[i].Name)
+	}
 
 	return err
 }
 
 // Since this function returns an unnamed boolean it requires no parenthesis
-func SamePath ( fileA *File, rootA string, fileB *File, rootB string ) bool {
+func SamePath ( fileA string, rootA string, fileB string, rootB string ) bool {
 
-	A := strings.TrimPrefix ( fileA.Name, rootA )
-	B := strings.TrimPrefix ( fileB.Name, rootB )
+	A := strings.TrimPrefix ( fileA, rootA )
+	B := strings.TrimPrefix ( fileB, rootB )
 
 	if A == B {
 		return true
