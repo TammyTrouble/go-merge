@@ -83,11 +83,15 @@ func main() {  // All functions are preceded by the keyword func and
 		fmt.Println(treeA.root, treeB.root, "are uniform directory structures.")
 	}
 
-	http.HandleFunc("/", handler)
+	if err := BuildPage ( &treeA, &treeB ); err != nil {
+		log.Println(err)
+	}
+
+	http.Handle("A", http.FileServer(http.Dir(treeA.root)))
+	http.Handle("B", http.FileServer(http.Dir(treeB.root)))
+	http.Handle("/", http.FileServer(http.Dir(".")))
 	http.ListenAndServe(":45321", nil)
 	
-	for {
-	}
 }
 
 // BuildTree initializes root tree struct.  Counts files, dirs.
@@ -334,7 +338,7 @@ func CrossCheck ( A *root, B *root ) ( err error ) {  // Named returns require p
 		
 		if _, test := A.md5[k]; !test {
 
-			temp := File{Name: B.root + v, Hash: k}
+			temp := File{Name: v, Hash: k}
 			A.notin.files[A.notin.fileCtr] = &temp
 			A.notin.fileCtr++
 
@@ -349,7 +353,7 @@ func CrossCheck ( A *root, B *root ) ( err error ) {  // Named returns require p
 
 		if _, test := B.md5[k]; !test {
 
-			temp := File{Name: A.root + v, Hash: k}
+			temp := File{Name: v, Hash: k}
 			B.notin.files[B.notin.fileCtr] = &temp
 			B.notin.fileCtr++
 
@@ -404,8 +408,8 @@ func CrossCheck ( A *root, B *root ) ( err error ) {  // Named returns require p
 
 		if ! SamePath(At, A.root, Bt, B.root) {
 
-			ta := File{ Name: A.root + At, Hash: i }
-			tb := File{ Name: B.root + Bt, Hash: i }
+			ta := File{ Name: At, Hash: i }
+			tb := File{ Name: Bt, Hash: i }
 
 			A.diff.files[A.diff.fileCtr] = &ta
 			B.diff.files[B.diff.fileCtr] = &tb
@@ -468,6 +472,65 @@ func ( dir *directory ) String() string {
 	return fmt.Sprint( dir.root )
 }
 
-func handler( w http.ResponseWriter, r *http.Request ) {
-	fmt.Fprintf(w, "Hi there I love")
+func BuildPage ( A *root, B *root ) error {
+
+	index, err := os.Create("index.html")
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(index, "<html>\n<body>\n<center>\n")
+
+	if A.dupes.fileCtr > 0 {
+		PrintDupes( A, index )
+	}
+
+	if B.dupes.fileCtr > 0 {
+		PrintDupes( B, index )
+	}
+
+	if A.diff.fileCtr > 0 {
+		fmt.Fprintf(index, "<h3>Files in different locations.</h3>\n<br />\n")
+		for i := 0; i < A.diff.fileCtr; i++ {
+
+			tempa := "A" + strings.TrimPrefix(A.diff.files[i].Name, A.root)
+			tempb := "B" + strings.TrimPrefix(B.diff.files[i].Name, B.root)
+			fmt.Fprintf(index, "<a href='" + tempa + "'>")
+			fmt.Fprintf(index, tempa)
+			fmt.Fprintf(index, "<img src='" + tempa + "' height='80' width='80'/>")
+			fmt.Fprintf(index, "</a>\n")
+			fmt.Fprintf(index, "<a href='" + tempb + "'>")
+			fmt.Fprintf(index, tempb)
+			fmt.Fprintf(index, "<img src='" + tempb + "' height='80' width='80'/>")
+			fmt.Fprintf(index, "</a>\n<br />\n")
+		}
+	}
+
+	fmt.Fprintf(index, "</center>\n</body>\n</html>\n")
+	return nil
 }
+
+func PrintDupes( tree *root, file *os.File ) {
+
+	fmt.Fprintf(file, "<h3>" + tree.root + " duplicates.</h3>\n<br />\n")
+	for o := 0; o < tree.dupes.fileCtr; o++ {
+		temp := "A" + strings.TrimPrefix(tree.dupes.files[o].Name, tree.root)
+		fmt.Fprintf(file, "<a href='" + temp + "'>")
+		fmt.Fprintf(file, temp)
+		fmt.Fprintf(file, "<img src='" + temp + "' height='80' width='80'/>")
+		fmt.Fprintf(file, "</a>\n")
+
+		for i := o + 1; i < tree.dupes.fileCtr; i++ {
+			if tree.dupes.files[o].Hash == tree.dupes.files[i].Hash {
+				temp := "A" + strings.TrimPrefix(tree.dupes.files[o].Name, tree.root)
+				fmt.Fprintf(file, "<a href='" + temp + "'>")
+				fmt.Fprintf(file, temp)
+				fmt.Fprintf(file, "<img src='" + temp + "' height='80' width='80'/>")
+				fmt.Fprintf(file, "</a>\n<br />\n")
+				o++
+			}
+		}
+	fmt.Fprintf(file, "<br />\n")
+}
+}
+
